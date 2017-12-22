@@ -14,12 +14,13 @@ class ControllerI(drobots.RobotController):
     The implementation only retrieve and print the location of the assigned
     robot
     """
-    def __init__(self, bot):
+    def __init__(self, bot,id):
         """
         ControllerI constructor. Accepts only a "bot" argument, that should be
         a RobotPrx object, usually sent by the game server.
         """
         self.bot = bot
+        self.id=id
 
     def turn(self, current):
         """
@@ -36,3 +37,8 @@ class ControllerI(drobots.RobotController):
         void robotDestroyed();
         """
         pass
+
+class DetectorControllerI(drobots.DetectorController):
+    def alert(self, pos, detections, current):
+        pass
+

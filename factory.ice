@@ -1,5 +1,11 @@
+#include <drobots.ice>
+
+
 module drobots {
-  interface Printer {
-    void make(Robot* bot);
+  interface Factory {
+    RobotController* make(Robot* bot, int id);
+    DetectorController* makeDetector (int id);
+
+
   };
 };
