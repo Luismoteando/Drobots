@@ -37,8 +37,3 @@ class ControllerI(drobots.RobotController):
         void robotDestroyed();
         """
         pass
-
-class DetectorControllerI(drobots.DetectorController):
-    def alert(self, pos, detections, current):
-        pass
-

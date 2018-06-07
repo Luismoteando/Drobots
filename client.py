@@ -1,30 +1,124 @@
 #!/usr/bin/env python3
 
-"""
-Implementation of a simple client that is able to accomplish the following:
-
-- Retrieve a GamePrx from a configuration file and connect to it
-- Serve a Player servant
-- Receive the invocations to create robot controllers
-- Receive the win, lose or gameAbort invocation at the end of a match
-- The 4 robot controllers behave in the same way
-
-This implementation lacks:
-
-- The RobotController servants are in the same process as the Player, so
-  it breaks a practice requisite
-- No detector controllers are created
-- No mine positions are returned to the game
-- There is no communication between the robot controllers
-"""
-
 import sys
 
 import Ice
 
-Ice.loadSlice('drobots.ice')
+Ice.loadSlice('factory.ice --all -I .')
+Ice.loadSlice('container.ice --all -I .')
 import drobots
-from player import PlayerI
+import Services
+import random
+
+class PlayerI(drobots.Player):
+    """
+    Player interface implementation.
+
+    It responds correctly to makeController, win, lose or gameAbort.
+    """
+    def __init__(self, container):
+        self.detector_controller = None
+        self.mine_index = 0
+        self.mines = [
+            drobots.Point(x=100, y=100),
+            drobots.Point(x=100, y=300),
+            drobots.Point(x=300, y=100),
+            drobots.Point(x=300, y=300),
+        ]
+        self.robotsContainer = container
+
+    def makeController(self, bot, current):
+        if self.robots == 0:
+            print("Building the container of robots...")
+            robot_container_prx = self.broker.stringToProxy('robots_container'+
+            ' -t -e 1.1:tcp -h localhost -p 9004 -t 60000')
+            containerRobot = \
+            Services.ContainerPrx.checkedCast(robot_container_prx)
+            containerRobot.setType("RobotContainer")
+            self.robots_container = containerRobot
+            container_prx = self.broker.stringToProxy('factory_container -t'+
+            ' -e 1.1:tcp -h localhost -p 9004 -t 60000')
+            containerFactory = Services.ContainerPrx.checkedCast(container_prx)
+            containerFactory.setType("FactoryContainer")
+            print("Building factories...")
+            for i in range(0,4):
+                string_prx = \
+                'factory -t -e 1.1:tcp -h localhost -p 900'+str(i)+' -t 60000'
+                factory_prx = self.broker.stringToProxy(string_prx)
+                print(factory_prx)
+                factory = Services.FactoryPrx.checkedCast(factory_prx)
+                containerFactory.link(i, factory_prx)
+                self.factory_container = containerFactory
+                print("Make controller received bot {}".format(bot))
+
+            i = self.robots % 4
+            print('Building robot controller in factory nº' + str(i))
+            factory_prx2 = self.factory_container.getElement(i)
+            print(factory_prx2)
+            factory = Services.FactoryPrx.checkedCast(factory_prx2)
+            robot = factory.make(bot, self.robots_container, self.robots)
+            self.robots += 1
+
+            return robot
+
+    def makeDetectorController(self, current):
+        print ("Detector connected. \n")
+
+        if self.portCounter == 5 :
+            self.portCounter = 2
+
+        proxyFactory = self.broker.stringToProxy("robotFactory -t -e 1.1:tcp -h {} -p 909{} -t 60000".format(self.my_IP, self.portCounter))
+        self.portCounter +=1
+
+        # Recover the factory to add the robot controller
+        factory = drobots.RobotFactoryPrx.checkedCast(proxyFactory)
+
+        # Calculate the id of the detector, minus 3 due to id of robots
+        id = len(self.robotsContainer.list()) - 3
+
+        detectorProxy = factory.makeDetector(id)
+
+        self.robotsContainer.link("detector" + str(id), detectorProxy)
+
+        return detectorProxy
+
+    def getMinePosition(self, current):
+        x = random.randint(0, 399)
+        y = random.randint(0, 399)
+        pos = drobots.Point(x,y)
+
+        while pos in self.mines:
+            x = random.randint(0, 399)
+            y = random.randint(0, 399)
+            pos = drobots.Point(x,y)
+
+        self.mines.append(pos)
+        self.mine_index += 1
+
+        return pos
+
+    def win(self, current):
+        """
+        Received when we win the match
+        """
+        print("You win")
+        current.adapter.getCommunicator().shutdown()
+
+    def lose(self, current):
+        """
+        Received when we lose the match
+        """
+        print("You lose :-(")
+        current.adapter.getCommunicator().shutdown()
+
+    def gameAbort(self, current):
+        """
+        Received when the match is aborted (when there are not enough players
+        to start a game, for example)
+        """
+        print("The game was aborted")
+        current.adapter.getCommunicator().shutdown()
+
 
 class ClientApp(Ice.Application):
     """
