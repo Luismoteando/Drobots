@@ -10,26 +10,26 @@ import socket
 import math
 
 class RobotControllerI(drobots.RobotFactory):
-	def make(self, robot, id, current):
+	def make(self, robot, key, current = None):
 		if (robot.ice_isA("::drobots::Attacker")):
-			servant = RobotControllerAttacker(robot, id)
+			servant = RobotControllerAttacker(robot, key)
 		else (robot.ice_isA("::drobots::Defender")):
-			servant = RobotControllerDefender(robot, id)
+			servant = RobotControllerDefender(robot, key)
 
-		robotProxy = current.adapter.addWithUUID(servant)
-		prx_id = robotProxy.ice_getIdentity()
-		direct_prx = current.adapter.createDirectProxy(prx_id)
+		robotProxy = current.adapter.addWithUUkey(servant)
+		prx_key = robotProxy.ice_getkeyentity()
+		direct_prx = current.adapter.createDirectProxy(prx_key)
 		robotProxy = drobots.RobotControllerPrx.uncheckedCast(robotProxy)
 
 		print("Robot proxy: {} \n".format(robotProxy))
 
 		return robotProxy
 
-	def makeDetector(self, id, current):
-		servant = DetectorController(id)
-		detectorProxy = current.adapter.addWithUUID(servant)
-		prx_id = detectorProxy.ice_getIdentity()
-		direct_prx = current.adapter.createDirectProxy(prx_id)
+	def makeDetector(self, key, current = None):
+		servant = DetectorController(key)
+		detectorProxy = current.adapter.addWithUUkey(servant)
+		prx_key = detectorProxy.ice_getkeyentity()
+		direct_prx = current.adapter.createDirectProxy(prx_key)
 		detectorProxy = drobots.DetectorControllerPrx.uncheckedCast(detectorProxy)
 
 		print("Detector proxy: {} \n".format(detectorProxy))
@@ -58,7 +58,7 @@ class Strategy(Ice.Application):
 
 		return corner
 
-	# We want to move the complete robots to the middle point of each battlefield side, starting by the nearest
+	# We want to move the complete robots to the mkeydle point of each battlefield skeye, starting by the nearest
 	def getNearestPoint(self, position, current = None):
 		# We want to move the robot to the nearest corner
 		distanceToDown = self.distanceToPoint(position, 200, 0)
@@ -94,9 +94,9 @@ class Strategy(Ice.Application):
 		return angle
 
 class RobotControllerDefenderI(drobots.RobotControllerDefender):
-	def __init__(self, bot, container, id):
+	def __init__(self, bot, container, key):
 		self.robot = bot
-		self.id = id
+		self.key = key
 		self.enemies = 0
 		self.robotsContainer = container
 		self.companions = {}
@@ -107,15 +107,16 @@ class RobotControllerDefenderI(drobots.RobotControllerDefender):
 		self.rangeToScan = (0,0)
 		self.angleToScan = 0
 
-		print("I'm the defender robot {}. \n".format(self.id))
+		print("I'm the defender robot {}. \n".format(self.key))
 
 	def turn(self, current = None):
-		print("Defender robot{} turn. \n".format(self.id))
+		print("Defender robot{} turn. \n".format(self.key))
 
 		# Get the robot's data
 		pos = self.robot.location()
 		energy = self.robot.energy()
 		damage = self.robot.damage()
+		speed = self.robot.speed()
 
 		if not self.arrivalToCorner:
 			if not self.selectedCorner:
@@ -146,7 +147,9 @@ class RobotControllerDefenderI(drobots.RobotControllerDefender):
 			if distanceDestination < 10:
 				speed = max(min(100, self.robot.speed() / (10 - distanceDestination)), 1)
 
-			self.robot.drive(angle, speed)
+			if distanceDestination > 10 && self.robot.energy() > 60:
+				self.robot.drive(angle, speed)
+				self.robot.energy -= 60
 
 			if distanceDestination == 0:
 				self.robot.drive(angle, 0)
@@ -154,8 +157,9 @@ class RobotControllerDefenderI(drobots.RobotControllerDefender):
 				self.arrivalToCorner = True
 		else:
 
-			wide = 20
-			detectedRobots = self.robot.scan(self.angleToScan, wide)
+			wkeye = 20
+			detectedRobots = self.robot.scan(self.angleToScan, wkeye)
+			self.robot.energy -= 10
 			print("I'm scanning with the angle {}\n".format(self.angleToScan))
 			print("The number of detected robots is = {}.\n".format(detectedRobots))
 			self.angleToScan = self.angleToScan + 20
@@ -165,34 +169,34 @@ class RobotControllerDefenderI(drobots.RobotControllerDefender):
 
 		# Get the updated robot's location
 		pos = self.robot.location()
+		self.robot.energy -= 1
 
 		# Send my updated position to my companions
 		self.counter = 1
 		while self.counter <= 4:
-			if self.counter != self.id:
-				robotProxy = self.robotsContainer.getProxy("robot"+str(self.counter))
+			if self.counter != self.key:
+				robotProxy = self.robotsContainer.getProxy("robot" + str(self.counter))
 				companion = drobots.RobotControllerCompletePrx.uncheckedCast(robotProxy)
-				companion.position(pos, self.id)
+				companion.position(pos, self.key)
 			self.counter += 1
 
-
 	def robotDestroyed(self, current = None):
-		print("Defender robot {} has been destroyed".format(self.id))
+		print("Defender robot {} has been destroyed".format(self.key))
 
-	def position(self, pointTransmitter, idTransmitter, current = None):
-		self.companions[idTransmitter] = pointTransmitter
+	def position(self, pointTransmitter, keyTransmitter, current = None):
+		self.companions[keyTransmitter] = pointTransmitter
 
-	def detectorEnemies(self, idDetector, pointTransmitter, enemies, current = None):
+	def detectorEnemies(self, keyDetector, pointTransmitter, enemies, current = None):
 		# The tuple detectorInfo contains the point and the enemies found by a detector
 		self.detectorInfo = (pointTransmitter, enemies)
 
 		# The detectors contains all detector's info
-		self.detectors[idDetector] = self.detectorInfo
+		self.detectors[keyDetector] = self.detectorInfo
 
 class RobotControllerAttackerI(drobots.RobotControllerAttacker):
-	def __init__(self, bot, container, id):
+	def __init__(self, bot, container, key):
 		self.robot = bot
-		self.id = id
+		self.key = key
 		self.enemies = 0
 		self.robotsContainer = container
 		self.companions = {}
@@ -201,15 +205,16 @@ class RobotControllerAttackerI(drobots.RobotControllerAttacker):
 		self.rangeToShoot = (0,360)
 		self.angleToShoot = 0
 
-		print("I'm the attacker robot {}. \n".format(self.id))
+		print("I'm the attacker robot {}. \n".format(self.key))
 
 	def turn(self, current = None):
-		print("Attacker robot {} turn. \n".format(self.id))
+		print("Attacker robot {} turn. \n".format(self.key))
 
 		# Get the robot's data
 		pos = self.robot.location()
 		energy = self.robot.energy()
 		damage = self.robot.damage()
+		speed = self.robot.speed()
 
 		if not self.arrivalToCentre:
 			#We set the centre coordenates as we want the attacker to move to the centre
@@ -224,7 +229,9 @@ class RobotControllerAttackerI(drobots.RobotControllerAttacker):
 			if distanceDestination < 10:
 				speed = max(min(100, self.robot.speed() / (10 - distanceDestination)), 1)
 
-			self.robot.drive(angle, speed)
+			if distanceDestination > 10 && self.robot.energy() > 60:
+				self.robot.drive(angle, speed)
+				self.robot.energy -= 60
 
 			if distanceDestination == 0:
 				self.robot.drive(angle, 0)
@@ -240,13 +247,12 @@ class RobotControllerAttackerI(drobots.RobotControllerAttacker):
 
 			distanceToShoot = 100
 
-			validShoot = self.robot.cannon(self.angleToShoot, distanceToShoot)
+			valkeyShoot = self.robot.cannon(self.angleToShoot, distanceToShoot)
 
-			if validshoot:
+			if valkeyshoot:
 				print("Fine! The shoot has hurt at least one enemy!")
 			else:
 				print("Sorry, there were no enemies near...")
-
 
 		# Get the updated robot's location
 		pos = self.robot.location()
@@ -254,39 +260,39 @@ class RobotControllerAttackerI(drobots.RobotControllerAttacker):
 		# Send my updated position to my companions
 		self.counter = 1
 		while self.counter <= 4:
-			if self.counter != self.id:
-				robotProxy = self.robotsContainer.getProxy("robot"+str(self.counter))
+			if self.counter != self.key:
+				robotProxy = self.robotsContainer.getProxy("robot" + str(self.counter))
 				companion = drobots.RobotControllerCompletePrx.uncheckedCast(robotProxy)
-				companion.position(pos, self.id)
+				companion.position(pos, self.key)
 			self.counter += 1
 
 	def robotDestroyed(self, current = None):
-		print("Attacker robot {} has been destroyed".format(self.id))
+		print("Attacker robot {} has been destroyed".format(self.key))
 
-	def position(self, pointTransmitter, idTransmitter, current = None):
-		self.companions[idTransmitter] = pointTransmitter
+	def position(self, pointTransmitter, keyTransmitter, current = None):
+		self.companions[keyTransmitter] = pointTransmitter
 
-	def detectorEnemies(self, idDetector, pointTransmitter, enemies, current = None):
+	def detectorEnemies(self, keyDetector, pointTransmitter, enemies, current = None):
 		# The tuple detectorInfo contain the point and the enemies found by a detector
 		self.detectorInfo = (pointTransmitter, enemies)
 
 		# The detectors contains all detector's info
-		self.detectors[idDetector] = self.detectorInfo
+		self.detectors[keyDetector] = self.detectorInfo
 
 class DetectorControllerI(drobots.DetectorController):
-	def __init__(self, id):
+	def __init__(self, key):
 		self.robotsContainer = container
-		self.id = id
+		self.key = key
 
 	def alert(self, pos, enemies, current = None):
-		print("Eureka! The detector {} has found {} enemies in the point {}. \n".format(self.id, enemies, pos))
+		print("Eureka! The detector {} has found {} enemies in the point {}. \n".format(self.key, enemies, pos))
 
 		# Send the number of the enemies to the companion robots
 		self.counter = 1
 		while self.counter <= 4:
-			robotProxy = self.robotsContainer.getProxy("robot"+str(self.counter))
+			robotProxy = self.robotsContainer.getProxy("robot" + str(self.counter))
 			companion = drobots.RobotControllerCompletePrx.uncheckedCast(robotProxy)
-			companion.detectorEnemies(self.id, pos, enemies)
+			companion.detectorEnemies(self.key, pos, enemies)
 			self.counter += 1
 
 class Server(Ice.Application):
@@ -295,15 +301,15 @@ class Server(Ice.Application):
 		adapter = broker.createObjectAdapter("RobotFactoryAdapter")
 
 		servant = RobotControllerI()
-		proxyFactory = adapter.add(servant, broker.stringToIdentity("robotFactory"))
+		proxyFactory = adapter.add(servant, broker.stringTokeyentity("robotFactory"))
 		print("I'm the factory: {} \n".format(proxyFactory))
 
 		factory = drobots.RobotFactoryPrx.uncheckedCast(proxyFactory)
 
 		factoriesContainer = Functions().getContainer(0)
 
-		id = len(factoriesContainer.list()) + 1
-		factoriesContainer.link("factory"+str(id), factory)
+		key = len(factoriesContainer.list()) + 1
+		factoriesContainer.link("factory"+str(key), factory)
 
 		sys.stdout.flush()
 

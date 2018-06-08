@@ -27,7 +27,7 @@ class PlayerI(drobots.Player):
         ]
         self.robotsContainer = container
 
-    def makeController(self, bot, current):
+    def makeController(self, bot, current = None):
         if self.robots == 0:
             print("Building the container of robots...")
             robot_container_prx = self.broker.stringToProxy('robots_container'+
@@ -61,28 +61,22 @@ class PlayerI(drobots.Player):
 
             return robot
 
-    def makeDetectorController(self, current):
-        print ("Detector connected. \n")
+    def makeDetectorController(self, current = None):
+        if self.detector_controller is not None:
+                return self.detector_controller
 
-        if self.portCounter == 5 :
-            self.portCounter = 2
-
-        proxyFactory = self.broker.stringToProxy("robotFactory -t -e 1.1:tcp -h {} -p 909{} -t 60000".format(self.my_IP, self.portCounter))
-        self.portCounter +=1
-
-        # Recover the factory to add the robot controller
-        factory = drobots.RobotFactoryPrx.checkedCast(proxyFactory)
+        print("Make detector controller.")
 
         # Calculate the id of the detector, minus 3 due to id of robots
         id = len(self.robotsContainer.list()) - 3
+        controller = Factory().makeDetector(id)
+        object_prx = current.adapter.addWithUUID(controller)
+        self.detector_controller = \
+            drobots.DetectorControllerPrx.checkedCast(object_prx)
 
-        detectorProxy = factory.makeDetector(id)
+        return self.detector_controller
 
-        self.robotsContainer.link("detector" + str(id), detectorProxy)
-
-        return detectorProxy
-
-    def getMinePosition(self, current):
+    def getMinePosition(self, current = None):
         x = random.randint(0, 399)
         y = random.randint(0, 399)
         pos = drobots.Point(x,y)
@@ -97,21 +91,21 @@ class PlayerI(drobots.Player):
 
         return pos
 
-    def win(self, current):
+    def win(self, current = None):
         """
         Received when we win the match
         """
         print("You win")
         current.adapter.getCommunicator().shutdown()
 
-    def lose(self, current):
+    def lose(self, current = None):
         """
         Received when we lose the match
         """
         print("You lose :-(")
         current.adapter.getCommunicator().shutdown()
 
-    def gameAbort(self, current):
+    def gameAbort(self, current = None):
         """
         Received when the match is aborted (when there are not enough players
         to start a game, for example)
